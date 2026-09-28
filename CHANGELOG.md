@@ -5,12 +5,10 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Note for the Release/PM stage:** the initial feature set below is complete and
-> QA-verified (all SRS acceptance criteria PASS). When cutting the first release,
-> rename the `[Unreleased]` heading to the chosen version and date, e.g.
-> `## [1.0.0] - YYYY-MM-DD`, and update the comparison links at the bottom.
+## [0.1.0] - 2026-09-28
 
-## [Unreleased]
+Initial release. Feature set is complete and QA-verified (all SRS acceptance
+criteria PASS).
 
 ### Added
 
@@ -57,4 +55,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comment. Boundary functions are total and never unwind across FFI. No heap
   allocation crosses the boundary, so no cross-language `free` pairing is needed.
 
-[Unreleased]: https://github.com/vladiant/rust-cpp-interop-demo/commits/main
+[0.1.0]: https://github.com/vladiant/rust-cpp-interop-demo/releases/tag/v0.1.0
