@@ -1,0 +1,138 @@
+# CI for the Rust <-> C++ interop demo.
+#
+# Every command below is copied verbatim from docs/tech-stack.md so that CI and
+# local development stay in lock-step. The canonical build/test entry point is
+# CMake + CTest (not bare `cargo build`); Corrosion is fetched at configure time.
+#
+# Jobs:
+#   build-test   fast gate: configure -> build -> ctest -> cargo test
+#   lint         quality gates: cargo fmt, cargo clippy, clang-format dry-run
+#   sanitizers   FFI memory/UB checks: scoped ASan/UBSan + valgrind (see note)
+#
+# The sanitizers job is kept separate (and non-blocking of the fast gate) because
+# it is heavier: it does two builds and installs valgrind. It mirrors exactly the
+# scoped recipe QA verified — ASan/UBSan on the C++-driven targets only, valgrind
+# on both binaries — because a whole-tree ASan build cannot link the rustc-driven
+# `rust_demo` (see docs/tech-stack.md "Memory / UB checkers" nuance + QA DEF-1).
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save free-tier minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_TYPE: Debug
+
+jobs:
+  build-test:
+    name: Build & test (CMake + CTest)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      # ubuntu-24.04 ships CMake >= 3.28 and g++ 13 (C++17); nothing extra needed.
+      - name: Show toolchain versions
+        run: |
+          cmake --version
+          g++ --version
+          rustc --version
+          cargo --version
+
+      - name: Configure (CMake + Corrosion)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build everything
+        run: cmake --build build
+
+      - name: Run the full test suite (CTest)
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run pure-Rust unit tests
+        run: cargo test -p interop_rs
+
+  lint:
+    name: Lint & format gates
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable with rustfmt and clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+      - name: Rust lint (clippy, warnings are errors)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      # ubuntu-24.04 ships clang-format 18; the repo has a checked-in .clang-format.
+      - name: C++ format check
+        run: clang-format --dry-run --Werror $(find cpp -name '*.cpp' -o -name '*.hpp' -o -name '*.h')
+
+  sanitizers:
+    name: Sanitizers & valgrind (FFI memory/UB)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends valgrind
+
+      # Ordinary (non-sanitized) build: needed for the valgrind checks below.
+      - name: Configure & build (plain Debug)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+
+      - name: Valgrind on both demo binaries
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 ./build/rust_demo
+          valgrind --leak-check=full --error-exitcode=1 ./build/cpp_demo
+
+      # Scoped ASan/UBSan: only the C++-driven targets are built/run so the global
+      # -fsanitize flags never reach the rustc-linked `rust_demo` (see header note).
+      - name: Configure & build ASan/UBSan (C++-driven targets only)
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-asan --target cpp_demo --target test_cpp_to_rust
+
+      - name: Run ASan/UBSan targets
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+        run: |
+          ./build-asan/cpp_demo
+          ./build-asan/test_cpp_to_rust
