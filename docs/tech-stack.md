@@ -92,17 +92,35 @@ Exact commands the **QA / Release** stages should run (all from repo root):
   (requires a checked-in `.clang-format`)
 - **C++ lint (optional):** `clang-tidy` over `cpp/` using CMake's
   `CMAKE_EXPORT_COMPILE_COMMANDS=ON` compilation database.
-- **Memory / UB checkers (important for FFI):**
-  - Address + Undefined Behavior sanitizers on the C++ targets (stable path):
-    configure a sanitized build
-    `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"`
-    then `cmake --build build-asan && ctest --test-dir build-asan --output-on-failure`.
-  - Valgrind on the demo binaries as an alternative/extra check:
-    `valgrind --leak-check=full --error-exitcode=1 ./build/rust_demo`
-    and `valgrind --leak-check=full --error-exitcode=1 ./build/cpp_demo`.
-  - Note: Rust's `-Zsanitizer=address` needs nightly; it is **not** required.
-    Running the linked binaries under the C++ ASan/UBSan build already exercises
-    both sides of each boundary crossing.
+- **Memory / UB checkers (important for FFI):** use **two complementary tools**,
+  split by which language *links* the final binary (see nuance note below).
+  - **ASan + UBSan on the C++-driven targets** (`cpp_demo`, `test_cpp_to_rust`):
+    configure a sanitized build, then build and run **only those targets** so the
+    global `-fsanitize` flags never reach the rustc-linked binary:
+    ```sh
+    cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+    cmake --build build-asan --target cpp_demo --target test_cpp_to_rust
+    ./build-asan/cpp_demo
+    ./build-asan/test_cpp_to_rust
+    ```
+  - **Valgrind on the Rust-driven target** (`rust_demo`) — and as an extra check on
+    `cpp_demo` — from the ordinary (non-sanitized) `build/`:
+    ```sh
+    valgrind --leak-check=full --error-exitcode=1 ./build/rust_demo
+    valgrind --leak-check=full --error-exitcode=1 ./build/cpp_demo
+    ```
+  - **Nuance (why the split exists):** the global `-fsanitize=address,undefined`
+    flags apply to C++ compilation/linking, but `rust_demo` is *linked by rustc via
+    Corrosion*, which does **not** pull in the ASan runtime — so a whole-project
+    sanitized build fails to link `rust_demo` with `undefined symbol: __asan_init`.
+    Scoping ASan/UBSan to the C++-linked targets and covering `rust_demo` with
+    valgrind keeps every documented command copy-paste runnable. (Full ASan
+    coverage of `rust_demo` is possible but needs extra Rust link flags — e.g.
+    `RUSTFLAGS="-Zsanitizer=address"` on nightly plus matching linker args — and is
+    **not** required here.) Between the two tools, both sides of every boundary
+    crossing are still exercised.
 
 ## Style & Idioms
 - **Ownership / resource management:**
