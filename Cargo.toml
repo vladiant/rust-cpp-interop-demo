@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["crates/interop_rs", "crates/rust_demo"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.74"
+license = "MIT"

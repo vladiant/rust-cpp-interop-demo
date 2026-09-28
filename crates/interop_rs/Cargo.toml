@@ -1,0 +1,11 @@
+[package]
+name = "interop_rs"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Rust functions exported over the C ABI for the C++ -> Rust interop direction."
+
+[lib]
+# staticlib -> C-linkable libinterop_rs.a for C++; rlib -> testable with `cargo test`.
+crate-type = ["staticlib", "rlib"]

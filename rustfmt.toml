@@ -1,0 +1,3 @@
+# rustfmt defaults are sufficient for this demo (tech-stack.md). This file
+# exists so the formatting configuration is explicit and version-controlled.
+edition = "2021"

@@ -1,0 +1,10 @@
+# Google C++ Style, lightly adjusted, applied to everything under cpp/.
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++17
+ColumnLimit: 80
+IndentWidth: 2
+DerivePointerAlignment: false
+PointerAlignment: Left
+SortIncludes: true

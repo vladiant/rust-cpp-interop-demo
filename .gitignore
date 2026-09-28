@@ -1,0 +1,11 @@
+# Rust / Cargo
+/target/
+**/target/
+
+# CMake build directories
+/build/
+/build-*/
+
+# Editor / OS cruft
+*.swp
+.DS_Store
