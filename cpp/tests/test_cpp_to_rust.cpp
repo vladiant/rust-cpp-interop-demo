@@ -34,6 +34,9 @@ int main() {
   assert(rust_count_vowels("xyz") == 0);
   assert(rust_count_vowels("") == 0);
 
+  // A null pointer is documented to cross safely as an empty string (0 vowels).
+  assert(rust_count_vowels(nullptr) == 0);
+
   std::printf("C++ -> Rust: all assertions passed.\n");
   return 0;
 }
